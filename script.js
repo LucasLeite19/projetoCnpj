@@ -28,7 +28,6 @@ function validarMatematicaCNPJ(cnpj) {
     cnpj = cnpj.replace(/[^\d]+/g, '');
     if (cnpj === '') return false;
     if (cnpj.length !== 14) return false;
-    // Elimina CNPJs com todos os dígitos iguais
     if (/^(\d)\1+$/.test(cnpj)) return false;
 
     let tamanho = cnpj.length - 2;
@@ -59,14 +58,16 @@ function validarMatematicaCNPJ(cnpj) {
 }
 
 // ==========================================
-// 2. INTERFACE E ARQUIVOS
+// 2. FUNÇÕES DE ARQUIVO E INTERFACE
 // ==========================================
+
 window.abrirModal = () => document.getElementById('modal').style.display = 'flex';
 window.fecharModal = () => document.getElementById('modal').style.display = 'none';
 
 window.mudarAba = (tipo) => {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+    
     if (tipo === 'arquivo') {
         document.querySelector('.tab:nth-child(1)').classList.add('active');
         document.getElementById('tabArquivo').style.display = 'block';
@@ -112,6 +113,7 @@ function iniciarComLista(textoBruto) {
 // ==========================================
 // 3. AUTO-SAVE E RESTAURAÇÃO
 // ==========================================
+
 function salvarProgresso() {
     const estado = { listaCNPJs, resultados, indiceAtual };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
@@ -142,8 +144,9 @@ window.restaurarSessao = () => {
 };
 
 // ==========================================
-// 4. MOTOR DE PROCESSAMENTO
+// 4. MOTOR DE PROCESSAMENTO (COM FORMATAÇÃO)
 // ==========================================
+
 window.pausar = () => {
     processando = false;
     document.getElementById('statusMsg').innerText = "Parando...";
@@ -174,16 +177,16 @@ async function rodarProcesso() {
 
         if (errosSeguidos >= LIMITE_ERRO) {
             processando = false;
-            alert("⚠️ Pausa de Segurança: Muitos erros seguidos.");
+            alert("⚠️ Pausa de Segurança: 5 erros seguidos.");
             ativarModoPausa();
             break;
         }
 
         const cnpjLimpo = listaCNPJs[i].replace(/\D/g, '');
-        elMsg.innerText = `Processando ${i + 1} (Tentando API MinhaReceita)...`;
+        elMsg.innerText = `Processando ${i + 1}...`;
 
         if (!validarMatematicaCNPJ(cnpjLimpo)) {
-            resultados.push({ cnpj: cnpjLimpo, status: "ERRO", motivo: "CNPJ Inválido" });
+            resultados.push({ cnpj: cnpjLimpo, status: "ERRO", motivo: "CNPJ Matematicamente Inválido" });
             elErr.innerText = parseInt(elErr.innerText) + 1;
         } else {
             const dados = await consultarAPI(cnpjLimpo);
@@ -204,8 +207,7 @@ async function rodarProcesso() {
 
         if (i % 10 === 0) salvarProgresso();
 
-        // Delay um pouco maior (800ms) pois a API MinhaReceita é mais sensível
-        const delay = resultados[resultados.length-1].status === "ERRO" ? 100 : 800;
+        const delay = resultados[resultados.length-1].motivo === "CNPJ Matematicamente Inválido" ? 50 : 700;
         await new Promise(r => setTimeout(r, delay));
     }
 
@@ -217,57 +219,49 @@ async function rodarProcesso() {
     }
 }
 
-// ==========================================
-// 5. NOVA CONSULTA DE API (MinhaReceita.org)
-// ==========================================
+// --- AQUI ESTÁ A MÁGICA DA FORMATAÇÃO ---
 async function consultarAPI(cnpj) {
     try {
-        // TROCAMOS A URL AQUI PARA MINHARECEITA (Mais dados de contato)
-        const res = await fetch(`https://minhareceita.org/${cnpj}`);
-        
+        const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
         if (res.status === 429) return { cnpj, status: "ERRO", motivo: "Rate Limit (429)" };
         if (!res.ok) return { cnpj, status: "ERRO", motivo: "Não encontrado" };
         
         const json = await res.json();
 
-        // Formatar Telefone
+        // 1. Formatar Telefone (DDD + Número)
         let telFormatado = "---";
         if (json.ddd_telefone_1) {
-            const raw = json.ddd_telefone_1.replace(/\D/g, '');
-            if (raw.length === 11) telFormatado = `(${raw.slice(0,2)}) ${raw.slice(2,7)}-${raw.slice(7)}`;
-            else if (raw.length === 10) telFormatado = `(${raw.slice(0,2)}) ${raw.slice(2,6)}-${raw.slice(6)}`;
-            else telFormatado = json.ddd_telefone_1;
+            const raw = json.ddd_telefone_1.replace(/\D/g, ''); // só numeros
+            if (raw.length === 11) { // Celular (11) 99999-9999
+                telFormatado = `(${raw.slice(0,2)}) ${raw.slice(2,7)}-${raw.slice(7)}`;
+            } else if (raw.length === 10) { // Fixo (11) 3333-4444
+                telFormatado = `(${raw.slice(0,2)}) ${raw.slice(2,6)}-${raw.slice(6)}`;
+            } else {
+                telFormatado = json.ddd_telefone_1; // Se for estranho, mantém original
+            }
         }
 
-        // Formatar Email (Garante que pegue ou email ou correio_eletronico)
-        let emailFinal = "---";
-        if (json.email) {
-            emailFinal = json.email.toLowerCase();
-        } else if (json.correio_eletronico) {
-            emailFinal = json.correio_eletronico.toLowerCase();
-        }
+        // 2. Formatar Email (Minúsculo)
+        let emailFormatado = json.email ? json.email.toLowerCase() : "---";
 
-        // Se veio "null" string ou vazio, marca explicitamente
-        if (!emailFinal || emailFinal === "null") emailFinal = "---";
-
+        // Retorna dados organizados para o Excel
         return { 
             status: "SUCESSO", 
-            // Forçamos o E-mail e Telefone a serem as primeiras colunas
-            CNPJ: json.cnpj,
-            EMAIL_FINAL: emailFinal, 
-            TELEFONE_PRINCIPAL: telFormatado,
             Razao_Social: json.razao_social,
-            Nome_Fantasia: json.nome_fantasia || "---",
-            Logradouro: `${json.logradouro || ''}, ${json.numero || ''}`,
-            Bairro: json.bairro || '',
-            Cidade: json.municipio || '',
-            UF: json.uf || '',
-            CEP: json.cep || '',
-            Situacao: json.descricao_situacao_cadastral || '',
-            Data_Abertura: json.data_inicio_atividade || ''
+            Nome_Fantasia: json.nome_fantasia || json.razao_social,
+            CNPJ: json.cnpj,
+            Telefone_Formatado: telFormatado,
+            Email_Formatado: emailFormatado,
+            Logradouro: `${json.logradouro}, ${json.numero}`,
+            Bairro: json.bairro,
+            Cidade: json.municipio,
+            UF: json.uf,
+            CEP: json.cep,
+            // Mantém os dados originais caso precise
+            ...json 
         };
 
-    } catch (e) {
+    } catch {
         return { cnpj, status: "ERRO", motivo: "Erro Rede" };
     }
 }
@@ -278,12 +272,13 @@ function ativarModoPausa() {
     salvarProgresso();
 }
 
+// Exportações
 window.baixarExcel = () => {
     if (!resultados.length) return alert("Sem dados");
     const ws = XLSX.utils.json_to_sheet(resultados);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Resultados");
-    XLSX.writeFile(wb, "CNPJ_Completo.xlsx");
+    XLSX.writeFile(wb, "CNPJ_Resultados.xlsx");
 };
 
 window.baixarJSON = () => {
@@ -291,6 +286,6 @@ window.baixarJSON = () => {
     const blob = new Blob([JSON.stringify(resultados, null, 2)], {type: "application/json"});
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = "CNPJ_Completo.json";
+    link.download = "CNPJ_Resultados.json";
     link.click();
 };
