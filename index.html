@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CNPJ Master 3.0 - AutoSave</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <h1>CNPJ Master 3.0</h1>
+            <span class="badge">PRO VERSION</span>
+        </div>
+
+        <div id="restoreArea" class="restore-box" style="display: none;">
+            <p>⚠️ Encontramos uma consulta interrompida (<span id="txtRestoreCount">0</span> itens).</p>
+            <button class="btn-restore" onclick="restaurarSessao()">🔄 RESTAURAR AGORA</button>
+            <button class="btn-discard" onclick="limparSessao()">Descartar</button>
+        </div>
+        
+        <div class="main-actions">
+            <button class="btn-main" onclick="abrirModal()">+ Nova Consulta (Arquivo ou Texto)</button>
+        </div>
+
+        <div class="stats-grid">
+            <div class="card">
+                <span class="label">Processados</span>
+                <span id="txtTotal" class="value">0</span>
+            </div>
+            <div class="card success">
+                <span class="label">Sucesso</span>
+                <span id="txtSucesso" class="value">0</span>
+            </div>
+            <div class="card error">
+                <span class="label">Erro / Inválido</span>
+                <span id="txtErro" class="value">0</span>
+            </div>
+        </div>
+
+        <div class="progress-area">
+            <p id="statusMsg">Pronto para iniciar.</p>
+            <progress id="progressBar" value="0" max="100"></progress>
+        </div>
+
+        <div class="controls-area">
+            <button id="btnPausar" class="btn-pause" style="display: none;" onclick="pausar()">⏸️ Pausar</button>
+            <div id="btnContinuarArea" style="display: none;">
+                <button class="btn-resume" onclick="continuar()">▶️ Continuar</button>
+            </div>
+        </div>
+
+        <div id="exportArea" class="export-area" style="display: none;">
+            <button class="btn-export excel" onclick="baixarExcel()">💾 Baixar Excel</button>
+            <button class="btn-export json" onclick="baixarJSON()">💾 Baixar JSON</button>
+        </div>
+    </div>
+
+    <div id="modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>Fonte de Dados</h3>
+            
+            <div class="tabs">
+                <button class="tab active" onclick="mudarAba('arquivo')">📁 Arquivo (.txt/.csv)</button>
+                <button class="tab" onclick="mudarAba('texto')">📝 Colar Texto</button>
+            </div>
+
+            <div id="tabArquivo" class="tab-content">
+                <div class="file-drop-area">
+                    <input type="file" id="fileInput" accept=".txt,.csv">
+                    <p>Clique ou arraste seu arquivo aqui (1 CNPJ por linha)</p>
+                </div>
+            </div>
+
+            <div id="tabTexto" class="tab-content" style="display: none;">
+                <textarea id="textInput" placeholder="Cole sua lista aqui..."></textarea>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-confirm" onclick="processarEntrada()">CARREGAR</button>
+                <button class="btn-cancel" onclick="fecharModal()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js" defer></script>
+</body>
+</html>
